@@ -19,7 +19,6 @@ async def get_merchant_disclosure(domain: str) -> str:
         The merchant's disclosure data as structured JSON, or an error message
         if no disclosure file is found.
     """
-    # Clean up the domain input
     domain = domain.strip()
     if domain.startswith("http://") or domain.startswith("https://"):
         base = domain.rstrip("/")
@@ -37,23 +36,23 @@ async def get_merchant_disclosure(domain: str) -> str:
                     data = response.json()
                     return json.dumps(data, indent=2)
                 except Exception:
-                    return f"Found a file at {url} but it could not be parsed as valid JSON. The merchant may have a formatting error in their disclose.json."
+                    return f"Found a file at {url} but it could not be parsed as valid JSON."
 
             elif response.status_code == 404:
                 return f"No disclose.json found at {url}. This merchant has not yet published a Disclose Framework disclosure file."
 
             else:
-                return f"Received HTTP {response.status_code} when trying to fetch {url}. The file may be temporarily unavailable."
+                return f"Received HTTP {response.status_code} when trying to fetch {url}."
 
     except httpx.TimeoutException:
-        return f"Request to {url} timed out. The merchant's server may be slow or unavailable."
+        return f"Request to {url} timed out."
 
     except httpx.ConnectError:
-        return f"Could not connect to {domain}. Please check that the domain is correct and reachable."
+        return f"Could not connect to {domain}. Please check the domain is correct."
 
     except Exception as e:
         return f"Unexpected error fetching {url}: {str(e)}"
 
 
 if __name__ == "__main__":
-    mcp.run()
+    mcp.run(transport="sse")
