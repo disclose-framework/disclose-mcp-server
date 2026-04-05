@@ -4,16 +4,36 @@ An MCP server for querying merchant disclosure signals published via the [Disclo
 
 ## What it does
 
-Merchants publish a `/.well-known/disclose.json` file on their domain containing operational signals — return rates, fulfillment times, inventory accuracy — along with permitted use terms. This MCP server lets any AI agent query that data directly.
+Merchants publish operational signals — return rates, fulfillment accuracy, chargeback ratios — along with permitted use terms. This MCP server lets any AI agent query that data directly.
 
-For merchants on hosted platforms that do not support the `/.well-known/` directory, the server falls back to `/disclose.json` at the domain root automatically.
+The server checks three discovery paths in order:
+
+1. `/.well-known/disclose.json` — canonical path
+1. `/disclose.json` — fallback for hosted platforms like Shopify that do not support the `/.well-known/` directory
+1. JSON-LD block in page `<head>` — for merchants using script-tag injection
+
+Signals sourced from the Shopify API and computed by Sure Signal are returned with full provenance metadata: `source`, `reported_by`, `computed_by`, and `attestation`. Attestation is `null` until a third-party verifier (such as Loop Returns) cryptographically signs the signal.
 
 ## Available Tools
 
 **`get_merchant_disclosure(domain)`**
-Fetches and returns a merchant's disclosed signals from their `/.well-known/disclose.json` file (with `/disclose.json` fallback).
+Fetches a merchant’s published disclosure signals from their domain. Returns all signals the merchant has chosen to publish, with provenance metadata, or an error if no disclosure is found.
 
 Example: `get_merchant_disclosure("example.com")`
+
+**`check_signal_coverage(domain)`**
+Returns a structured coverage report for the six Sure Signal V1 signals: which are present, which are missing, whether any carry attestation, and an overall coverage percentage. Useful for agents evaluating merchant data completeness before a purchase decision.
+
+The six V1 signals:
+
+- `product_return_rate`
+- `on_time_shipment_rate`
+- `refund_processing_time_median_days`
+- `chargeback_rate` and `dispute_win_rate` (paired)
+- `platform_seller_tenure_days`
+- `order_accuracy_rate`
+
+Example: `check_signal_coverage("example.com")`
 
 ## Setup
 
@@ -25,23 +45,23 @@ Example: `get_merchant_disclosure("example.com")`
 ### Installation
 
 1. Clone this repository:
+   
    ```
    git clone https://github.com/disclose-framework/disclose-mcp-server
    cd disclose-mcp-server
    ```
-
-2. Install uv if you don't have it:
-   - macOS/Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-   - Windows: `curl -LsSf https://astral.sh/uv/install.ps1 | powershell`
-
-3. Install dependencies:
+1. Install uv if you don’t have it:
+- macOS/Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- Windows: `curl -LsSf https://astral.sh/uv/install.ps1 | powershell`
+1. Install dependencies:
+   
    ```
    uv venv
    source .venv/bin/activate
    uv add "mcp[cli]" httpx
    ```
-
-4. Run the server:
+1. Run the server:
+   
    ```
    uv run server.py
    ```
@@ -49,12 +69,11 @@ Example: `get_merchant_disclosure("example.com")`
 ## Connecting to Claude Desktop
 
 1. Install [Claude Desktop](https://claude.ai/download)
-
-2. Open or create the config file:
-   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-   - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-
-3. Add this configuration:
+1. Open or create the config file:
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+1. Add this configuration:
+   
    ```json
    {
      "mcpServers": {
@@ -70,13 +89,11 @@ Example: `get_merchant_disclosure("example.com")`
      }
    }
    ```
-
-4. Restart Claude Desktop
-
-5. Try asking: *"What are the disclosure signals for example.com?"*
+1. Restart Claude Desktop
+1. Try asking: *“What are the disclosure signals for example.com?”* or *“Check signal coverage for example.com.”*
 
 ## About
 
-Part of the [Disclose Framework](https://discloseframework.dev) — an open standard for machine-readable merchant disclosure signals for AI agents.
+Part of the [Disclose Framework](https://discloseframework.dev) — an open standard for machine-readable merchant performance signals for AI agents.
 
 Contribute at [github.com/disclose-framework](https://github.com/disclose-framework)
