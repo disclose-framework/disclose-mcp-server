@@ -239,6 +239,4 @@ async def check_signal_coverage(domain: str) -> str:
     return json.dumps(report, indent=2)
 
 if __name__ == "__main__":
-    import os
-    port = int(os.environ.get("PORT", 8080))
-    mcp.run(transport="sse", port=port)
+    mcp.run()
