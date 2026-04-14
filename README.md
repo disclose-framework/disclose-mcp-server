@@ -12,12 +12,12 @@ The server checks three discovery paths in order:
 1. `/disclose.json` — fallback for hosted platforms like Shopify that do not support the `/.well-known/` directory
 1. JSON-LD block in page `<head>` — for merchants using script-tag injection
 
-Signals sourced from the Shopify API and computed by Sure Signal are returned with full provenance metadata: `source`, `reported_by`, `computed_by`, and `attestation`. Attestation is `null` until a third-party verifier (such as Loop Returns) cryptographically signs the signal.
+Signals sourced from the Shopify API and computed by Sure Signal are returned with full provenance metadata: `source`, `reported_by`, `computed_by`, `attestation_level`, and `attestation`. Attestation is `null` until a third-party Signatory (such as Loop Returns) cryptographically signs the signal.
 
 ## Available Tools
 
 **`get_merchant_disclosure(domain)`**
-Fetches a merchant’s published disclosure signals from their domain. Returns all signals the merchant has chosen to publish, with provenance metadata, or an error if no disclosure is found.
+Fetches a merchant's published disclosure signals from their domain. Returns all signals the merchant has chosen to publish, with provenance metadata, or an error if no disclosure is found.
 
 Example: `get_merchant_disclosure("example.com")`
 
@@ -50,7 +50,7 @@ Example: `check_signal_coverage("example.com")`
    git clone https://github.com/disclose-framework/disclose-mcp-server
    cd disclose-mcp-server
    ```
-1. Install uv if you don’t have it:
+1. Install uv if you don't have it:
 - macOS/Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - Windows: `curl -LsSf https://astral.sh/uv/install.ps1 | powershell`
 1. Install dependencies:
@@ -90,7 +90,7 @@ Example: `check_signal_coverage("example.com")`
    }
    ```
 1. Restart Claude Desktop
-1. Try asking: *“What are the disclosure signals for example.com?”* or *“Check signal coverage for example.com.”*
+1. Try asking: *"What are the disclosure signals for example.com?"* or *"Check signal coverage for example.com."*
 
 ## About
 
