@@ -15,11 +15,16 @@ V1_SIGNALS = [
     "order_accuracy_rate",
 ]
 
+# V1 signal keys with disclose: prefix for new spec structure
+V1_SIGNAL_KEYS = [f"disclose:{s}" for s in V1_SIGNALS]
+
+
 def _normalize_base(domain: str) -> str:
     domain = domain.strip()
     if domain.startswith("http://") or domain.startswith("https://"):
         return domain.rstrip("/")
     return f"https://{domain.rstrip('/')}"
+
 
 def _extract_jsonld_from_html(html: str) -> dict | None:
     """
@@ -45,43 +50,64 @@ def _extract_jsonld_from_html(html: str) -> dict | None:
             continue
     return None
 
+
+def _get_signal_value(signal):
+    """
+    Safely extract the scalar value from a signal object or flat value.
+    Handles both new signal object structure and legacy flat values.
+    """
+    if isinstance(signal, dict):
+        return signal.get("value")
+    return signal
+
+
 def _annotate_signals(data: dict) -> dict:
     """
-    Walk the disclosure payload and annotate any V1 signals that are
-    present but lack a source block with the platform-sourced default.
-    Signals with an existing source block are left untouched.
+    Walk the disclosure payload and annotate any V1 signals in the
+    attributes object that are missing provenance fields.
+
+    Handles three cases:
+    - New signal object structure (has attestation_level) -- left untouched
+    - Flat value (legacy) -- wrapped in a signal object with attestation_level: none
+    - Signal object missing attestation_level -- annotated with defaults
     """
-    default_source = {
-        "source": "shopify_api",
-        "reported_by": "merchant",
-        "computed_by": "sure_signal",
-        "attestation": None,
-    }
+    attributes = data.get("attributes", {})
+    if not attributes:
+        return data
 
-    def annotate_block(block: dict) -> dict:
-        signals = block.get("signals", {})
-        for key in V1_SIGNALS:
-            if key in signals:
-                sig = signals[key]
-                if isinstance(sig, dict) and "source" not in sig:
-                    sig["source"] = default_source.copy()
-        return block
+    for prefixed_key in V1_SIGNAL_KEYS:
+        if prefixed_key not in attributes:
+            continue
 
-    # Merchant-level signals
-    if "signals" in data:
-        data = annotate_block(data)
+        sig = attributes[prefixed_key]
 
-    # Offer-level signals
-    for offer in data.get("offers", []):
-        if "signals" in offer:
-            annotate_block(offer)
+        # Already a fully-formed signal object -- leave untouched
+        if isinstance(sig, dict) and "attestation_level" in sig:
+            continue
 
-    # Item-level signals
-    for item in data.get("items", []):
-        if "signals" in item:
-            annotate_block(item)
+        # Flat value (legacy format) -- wrap in signal object
+        if not isinstance(sig, dict):
+            attributes[prefixed_key] = {
+                "value": sig,
+                "reported_by": "merchant",
+                "attestation_level": "none",
+                "attestation": None,
+            }
+            continue
+
+        # Signal object exists but missing attestation_level -- annotate
+        # Infer tier from available fields
+        if "computed_by" in sig and "source" in sig:
+            level = "computed"
+        else:
+            level = "none"
+
+        sig.setdefault("reported_by", "merchant")
+        sig.setdefault("attestation_level", level)
+        sig.setdefault("attestation", None)
 
     return data
+
 
 @mcp.tool()
 async def get_merchant_disclosure(domain: str) -> str:
@@ -142,6 +168,7 @@ async def get_merchant_disclosure(domain: str) -> str:
             f"{base}/disclose.json, and JSON-LD in page <head>."
         )
 
+
 @mcp.tool()
 async def check_signal_coverage(domain: str) -> str:
     """
@@ -151,7 +178,7 @@ async def check_signal_coverage(domain: str) -> str:
       - Which V1 signals are present
       - Which V1 signals are missing
       - Overall coverage percentage
-      - Attestation status for present signals
+      - Attestation level for present signals
 
     Args:
         domain: The merchant domain to check (e.g. 'example.com'
@@ -203,24 +230,34 @@ async def check_signal_coverage(domain: str) -> str:
             ]
         }, indent=2)
 
-    # Extract merchant-level signals
-    signals = data.get("signals", {})
+    # Extract attributes from new spec structure
+    attributes = data.get("attributes", {})
 
     present = []
     missing = []
     attestation_status = {}
 
-    for sig_key in V1_SIGNALS:
-        if sig_key in signals:
-            present.append(sig_key)
-            sig_val = signals[sig_key]
+    for sig_key in V1_SIGNAL_KEYS:
+        bare_key = sig_key.replace("disclose:", "")
+
+        if sig_key in attributes:
+            present.append(bare_key)
+            sig_val = attributes[sig_key]
+
             if isinstance(sig_val, dict):
-                attestation = sig_val.get("source", {}).get("attestation")
-                attestation_status[sig_key] = "attested" if attestation else "merchant-reported"
+                level = sig_val.get("attestation_level", "none")
+                # Map attestation_level to human-readable label
+                label = {
+                    "signatory": "signatory-attested",
+                    "computed": "computed (platform API)",
+                    "none": "merchant-reported",
+                }.get(level, level)
+                attestation_status[bare_key] = label
             else:
-                attestation_status[sig_key] = "present (no provenance block)"
+                # Legacy flat value
+                attestation_status[bare_key] = "present (legacy format, no provenance)"
         else:
-            missing.append(sig_key)
+            missing.append(bare_key)
 
     coverage_pct = round(len(present) / len(V1_SIGNALS) * 100, 1)
 
@@ -237,6 +274,7 @@ async def check_signal_coverage(domain: str) -> str:
     }
 
     return json.dumps(report, indent=2)
+
 
 if __name__ == "__main__":
     mcp.run()
