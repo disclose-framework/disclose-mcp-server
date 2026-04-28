@@ -279,14 +279,11 @@ async def check_signal_coverage(domain: str) -> str:
 if __name__ == "__main__":
     import os
     import uvicorn
+    from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+    
+    # Patch out the host validation that blocks Railway's proxy
+    StreamableHTTPSessionManager._validate_host = lambda self, host: None
+    
     port = int(os.environ.get("PORT", 8080))
     app = mcp.streamable_http_app()
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=port,
-        proxy_headers=True,
-        forwarded_allow_ips="*",
-        server_header=False,
-        access_log=True,
-    )
+    uvicorn.run(app, host="0.0.0.0", port=port, proxy_headers=True, forwarded_allow_ips="*")
