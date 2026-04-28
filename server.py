@@ -31,11 +31,6 @@ def _normalize_base(domain: str) -> str:
 
 
 def _extract_jsonld_from_html(html: str) -> dict | None:
-    """
-    Extract a Disclose Framework signal block from a page's <head>
-    by finding <script type="application/ld+json"> tags and looking
-    for a @type of DiscloseSignals (or a disclose_signals / merchant_domain key).
-    """
     pattern = re.compile(
         r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
         re.DOTALL | re.IGNORECASE,
@@ -55,13 +50,6 @@ def _extract_jsonld_from_html(html: str) -> dict | None:
 
 
 def _get_attestation_label(signal: dict) -> str:
-    """
-    Map the attestation field from the file structure to a human-readable label.
-    File structure uses:
-      - attestation: null   -> merchant-reported
-      - attestation: <value> -> attested (show value)
-    Also considers computed_by field.
-    """
     if not isinstance(signal, dict):
         return "present (legacy format, no provenance)"
 
@@ -80,13 +68,6 @@ def _get_attestation_label(signal: dict) -> str:
 
 
 def _annotate_signals(data: dict) -> dict:
-    """
-    Walk the disclosure payload and annotate any V1 signals in the
-    signals object that are missing provenance fields.
-
-    Uses file structure: parent key is "signals", bare signal names (no prefix),
-    attestation field (not attestation_level).
-    """
     signals = data.get("signals", {})
     if not signals:
         return data
@@ -97,7 +78,6 @@ def _annotate_signals(data: dict) -> dict:
 
         sig = signals[key]
 
-        # Flat value (legacy format) -- wrap in signal object
         if not isinstance(sig, dict):
             signals[key] = {
                 "value": sig,
@@ -107,7 +87,6 @@ def _annotate_signals(data: dict) -> dict:
             }
             continue
 
-        # Signal object -- fill in any missing provenance fields
         sig.setdefault("reported_by", "merchant")
         sig.setdefault("computed_by", None)
         sig.setdefault("attestation", None)
@@ -137,7 +116,6 @@ async def get_merchant_disclosure(domain: str) -> str:
 
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
 
-        # Path 1 and 2: disclose.json files
         for path in ["/.well-known/disclose.json", "/disclose.json"]:
             url = f"{base}{path}"
             try:
@@ -156,7 +134,6 @@ async def get_merchant_disclosure(domain: str) -> str:
             except httpx.RequestError as e:
                 return f"Network error reaching {url}: {e}"
 
-        # Path 3: JSON-LD in page <head>
         try:
             page_url = base
             response = await client.get(page_url)
@@ -250,7 +227,6 @@ async def check_signal_coverage(domain: str) -> str:
             sig = signals[key]
             attestation_status[key] = _get_attestation_label(sig)
 
-            # Flag signals that are present but have no value yet
             value = sig.get("value") if isinstance(sig, dict) else sig
             if value is None:
                 present_with_null_value.append(key)
@@ -286,5 +262,5 @@ if __name__ == "__main__":
     import os
     import uvicorn
     port = int(os.environ.get("PORT", 8080))
-    app = mcp.streamable_http_app()
+    app = mcp.sse_app()
     uvicorn.run(app, host="0.0.0.0", port=port, proxy_headers=True, forwarded_allow_ips="*")
