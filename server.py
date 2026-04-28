@@ -277,4 +277,8 @@ async def check_signal_coverage(domain: str) -> str:
 
 
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http", host="0.0.0.0", port=8080)
+    import os
+    import uvicorn
+    port = int(os.environ.get("PORT", 8080))
+    app = mcp.streamable_http_app()
+    uvicorn.run(app, host="0.0.0.0", port=port)
