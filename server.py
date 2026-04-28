@@ -22,9 +22,6 @@ V1_SIGNALS = [
     "order_accuracy_rate",
 ]
 
-# V1 signal keys with disclose: prefix for new spec structure
-V1_SIGNAL_KEYS = [f"disclose:{s}" for s in V1_SIGNALS]
-
 
 def _normalize_base(domain: str) -> str:
     domain = domain.strip()
@@ -37,7 +34,7 @@ def _extract_jsonld_from_html(html: str) -> dict | None:
     """
     Extract a Disclose Framework signal block from a page's <head>
     by finding <script type="application/ld+json"> tags and looking
-    for a @type of DiscloseSignals (or a disclose_signals key).
+    for a @type of DiscloseSignals (or a disclose_signals / merchant_domain key).
     """
     pattern = re.compile(
         r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
@@ -46,10 +43,9 @@ def _extract_jsonld_from_html(html: str) -> dict | None:
     for match in pattern.finditer(html):
         try:
             data = json.loads(match.group(1).strip())
-            # Accept if it looks like a Disclose payload
             if isinstance(data, dict) and (
                 data.get("@type") == "DiscloseSignals"
-                or "disclose_signals" in data
+                or "signals" in data
                 or "merchant_domain" in data
             ):
                 return data
@@ -58,59 +54,62 @@ def _extract_jsonld_from_html(html: str) -> dict | None:
     return None
 
 
-def _get_signal_value(signal):
+def _get_attestation_label(signal: dict) -> str:
     """
-    Safely extract the scalar value from a signal object or flat value.
-    Handles both new signal object structure and legacy flat values.
+    Map the attestation field from the file structure to a human-readable label.
+    File structure uses:
+      - attestation: null   -> merchant-reported
+      - attestation: <value> -> attested (show value)
+    Also considers computed_by field.
     """
-    if isinstance(signal, dict):
-        return signal.get("value")
-    return signal
+    if not isinstance(signal, dict):
+        return "present (legacy format, no provenance)"
+
+    attestation = signal.get("attestation")
+    computed_by = signal.get("computed_by")
+    reported_by = signal.get("reported_by", "merchant")
+
+    if attestation is not None:
+        return f"attested ({attestation})"
+    elif computed_by:
+        return f"computed by {computed_by}"
+    elif reported_by:
+        return f"merchant-reported (via {reported_by})"
+    else:
+        return "merchant-reported"
 
 
 def _annotate_signals(data: dict) -> dict:
     """
     Walk the disclosure payload and annotate any V1 signals in the
-    attributes object that are missing provenance fields.
+    signals object that are missing provenance fields.
 
-    Handles three cases:
-    - New signal object structure (has attestation_level) -- left untouched
-    - Flat value (legacy) -- wrapped in a signal object with attestation_level: none
-    - Signal object missing attestation_level -- annotated with defaults
+    Uses file structure: parent key is "signals", bare signal names (no prefix),
+    attestation field (not attestation_level).
     """
-    attributes = data.get("attributes", {})
-    if not attributes:
+    signals = data.get("signals", {})
+    if not signals:
         return data
 
-    for prefixed_key in V1_SIGNAL_KEYS:
-        if prefixed_key not in attributes:
+    for key in V1_SIGNALS:
+        if key not in signals:
             continue
 
-        sig = attributes[prefixed_key]
-
-        # Already a fully-formed signal object -- leave untouched
-        if isinstance(sig, dict) and "attestation_level" in sig:
-            continue
+        sig = signals[key]
 
         # Flat value (legacy format) -- wrap in signal object
         if not isinstance(sig, dict):
-            attributes[prefixed_key] = {
+            signals[key] = {
                 "value": sig,
                 "reported_by": "merchant",
-                "attestation_level": "none",
+                "computed_by": None,
                 "attestation": None,
             }
             continue
 
-        # Signal object exists but missing attestation_level -- annotate
-        # Infer tier from available fields
-        if "computed_by" in sig and "source" in sig:
-            level = "computed"
-        else:
-            level = "none"
-
+        # Signal object -- fill in any missing provenance fields
         sig.setdefault("reported_by", "merchant")
-        sig.setdefault("attestation_level", level)
+        sig.setdefault("computed_by", None)
         sig.setdefault("attestation", None)
 
     return data
@@ -138,7 +137,7 @@ async def get_merchant_disclosure(domain: str) -> str:
 
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
 
-        # --- Path 1 and 2: disclose.json files ---
+        # Path 1 and 2: disclose.json files
         for path in ["/.well-known/disclose.json", "/disclose.json"]:
             url = f"{base}{path}"
             try:
@@ -157,7 +156,7 @@ async def get_merchant_disclosure(domain: str) -> str:
             except httpx.RequestError as e:
                 return f"Network error reaching {url}: {e}"
 
-        # --- Path 3: JSON-LD in page <head> ---
+        # Path 3: JSON-LD in page <head>
         try:
             page_url = base
             response = await client.get(page_url)
@@ -184,8 +183,9 @@ async def check_signal_coverage(domain: str) -> str:
     Returns a structured report showing:
       - Which V1 signals are present
       - Which V1 signals are missing
+      - Which present signals have null values
       - Overall coverage percentage
-      - Attestation level for present signals
+      - Attestation status for present signals
 
     Args:
         domain: The merchant domain to check (e.g. 'example.com'
@@ -237,46 +237,45 @@ async def check_signal_coverage(domain: str) -> str:
             ]
         }, indent=2)
 
-    # Extract attributes from new spec structure
-    attributes = data.get("attributes", {})
+    signals = data.get("signals", {})
 
     present = []
+    present_with_null_value = []
     missing = []
     attestation_status = {}
 
-    for sig_key in V1_SIGNAL_KEYS:
-        bare_key = sig_key.replace("disclose:", "")
+    for key in V1_SIGNALS:
+        if key in signals:
+            present.append(key)
+            sig = signals[key]
+            attestation_status[key] = _get_attestation_label(sig)
 
-        if sig_key in attributes:
-            present.append(bare_key)
-            sig_val = attributes[sig_key]
-
-            if isinstance(sig_val, dict):
-                level = sig_val.get("attestation_level", "none")
-                # Map attestation_level to human-readable label
-                label = {
-                    "signatory": "signatory-attested",
-                    "computed": "computed (platform API)",
-                    "none": "merchant-reported",
-                }.get(level, level)
-                attestation_status[bare_key] = label
-            else:
-                # Legacy flat value
-                attestation_status[bare_key] = "present (legacy format, no provenance)"
+            # Flag signals that are present but have no value yet
+            value = sig.get("value") if isinstance(sig, dict) else sig
+            if value is None:
+                present_with_null_value.append(key)
         else:
-            missing.append(bare_key)
+            missing.append(key)
 
     coverage_pct = round(len(present) / len(V1_SIGNALS) * 100, 1)
+    populated_pct = round(
+        (len(present) - len(present_with_null_value)) / len(V1_SIGNALS) * 100, 1
+    )
 
     report = {
         "domain": domain,
+        "schema_version": data.get("schema_version"),
+        "generated_at": data.get("generated_at"),
         "v1_signal_coverage": {
             "total_v1_signals": len(V1_SIGNALS),
             "present": len(present),
+            "present_with_null_value": len(present_with_null_value),
             "missing": len(missing),
             "coverage_percent": coverage_pct,
+            "populated_percent": populated_pct,
         },
         "present_signals": {k: attestation_status[k] for k in present},
+        "present_but_null": present_with_null_value,
         "missing_signals": missing,
     }
 
