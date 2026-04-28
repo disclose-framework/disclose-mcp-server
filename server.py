@@ -281,4 +281,10 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8080))
     app = mcp.streamable_http_app()
-    uvicorn.run(app, host="0.0.0.0", port=port, proxy_headers=True, forwarded_allow_ips="*", ws="none")
+    
+    config = uvicorn.Config(app, host="0.0.0.0", port=port, proxy_headers=True, forwarded_allow_ips="*")
+    config.load()
+    config.loaded_app.middleware_stack = config.loaded_app.app
+    server = uvicorn.Server(config)
+    import asyncio
+    asyncio.run(server.serve())
