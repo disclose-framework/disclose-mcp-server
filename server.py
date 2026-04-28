@@ -270,6 +270,13 @@ async def oauth_protected_resource(request: Request):
     })
 
 
+async def oauth_protected_resource_mcp(request: Request):
+    return JSONResponse({
+        "resource": "https://mcp.discloseframework.dev",
+        "authorization_servers": []
+    })
+
+
 async def oauth_authorization_server(request: Request):
     return JSONResponse({
         "issuer": "https://mcp.discloseframework.dev",
@@ -296,6 +303,7 @@ async def lifespan(app):
 
 routes = [
     Route("/.well-known/oauth-protected-resource", oauth_protected_resource),
+    Route("/.well-known/oauth-protected-resource/mcp", oauth_protected_resource_mcp),
     Route("/.well-known/oauth-authorization-server", oauth_authorization_server),
     Route("/register", register, methods=["POST"]),
     Mount("/", app=mcp_app),
