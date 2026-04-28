@@ -279,13 +279,14 @@ async def check_signal_coverage(domain: str) -> str:
 if __name__ == "__main__":
     import os
     import uvicorn
-    from starlette.middleware import Middleware
-    from starlette.applications import Starlette
-    
     port = int(os.environ.get("PORT", 8080))
-    mcp_app = mcp.streamable_http_app()
-    
-    # Wrap in a Starlette app that strips the host check
-    app = Starlette(routes=mcp_app.routes)
-    
-    uvicorn.run(app, host="0.0.0.0", port=port, proxy_headers=True, forwarded_allow_ips="*")
+    app = mcp.streamable_http_app()
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=port,
+        proxy_headers=True,
+        forwarded_allow_ips="*",
+        server_header=False,
+        access_log=True,
+    )
