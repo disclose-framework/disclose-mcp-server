@@ -1,6 +1,7 @@
 import httpx
 import json
 import re
+from contextlib import asynccontextmanager
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
@@ -284,14 +285,23 @@ async def register(request: Request):
     }, status_code=201)
 
 
+mcp_app = mcp.streamable_http_app()
+
+
+@asynccontextmanager
+async def lifespan(app):
+    async with mcp_app.router.lifespan_context(app):
+        yield
+
+
 routes = [
     Route("/.well-known/oauth-protected-resource", oauth_protected_resource),
     Route("/.well-known/oauth-authorization-server", oauth_authorization_server),
     Route("/register", register, methods=["POST"]),
-    Mount("/", app=mcp.streamable_http_app()),
+    Mount("/", app=mcp_app),
 ]
 
-app = Starlette(routes=routes)
+app = Starlette(routes=routes, lifespan=lifespan)
 
 if __name__ == "__main__":
     import os
