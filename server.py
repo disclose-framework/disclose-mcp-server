@@ -324,7 +324,7 @@ routes = [
     Route("/.well-known/oauth-protected-resource/mcp", oauth_protected_resource_mcp),
     Route("/.well-known/oauth-authorization-server", oauth_authorization_server),
     Route("/register", register, methods=["POST"]),
-    Mount("/mcp", app=mcp_app),
+    Mount("/", app=mcp_app),
 ]
 
 app = Starlette(routes=routes, lifespan=lifespan)
