@@ -292,6 +292,10 @@ async def register(request: Request):
     }, status_code=201)
 
 
+async def mcp_head(request: Request):
+    return JSONResponse({}, status_code=200)
+
+
 mcp_app = mcp.streamable_http_app()
 
 
@@ -306,6 +310,7 @@ routes = [
     Route("/.well-known/oauth-protected-resource/mcp", oauth_protected_resource_mcp),
     Route("/.well-known/oauth-authorization-server", oauth_authorization_server),
     Route("/register", register, methods=["POST"]),
+    Route("/mcp", mcp_head, methods=["HEAD"]),
     Mount("/", app=mcp_app),
 ]
 
