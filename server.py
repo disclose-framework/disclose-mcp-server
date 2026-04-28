@@ -2,8 +2,11 @@ import httpx
 import json
 import re
 from mcp.server.fastmcp import FastMCP
-
 from mcp.server.transport_security import TransportSecuritySettings
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.routing import Route, Mount
 
 mcp = FastMCP(
     "Disclose Framework",
@@ -259,9 +262,39 @@ async def check_signal_coverage(domain: str) -> str:
     return json.dumps(report, indent=2)
 
 
+async def oauth_protected_resource(request: Request):
+    return JSONResponse({
+        "resource": "https://mcp.discloseframework.dev",
+        "authorization_servers": []
+    })
+
+
+async def oauth_authorization_server(request: Request):
+    return JSONResponse({
+        "issuer": "https://mcp.discloseframework.dev",
+        "token_endpoint": "https://mcp.discloseframework.dev/token",
+        "response_types_supported": ["token"]
+    })
+
+
+async def register(request: Request):
+    return JSONResponse({
+        "client_id": "public",
+        "client_secret": None
+    }, status_code=201)
+
+
+routes = [
+    Route("/.well-known/oauth-protected-resource", oauth_protected_resource),
+    Route("/.well-known/oauth-authorization-server", oauth_authorization_server),
+    Route("/register", register, methods=["POST"]),
+    Mount("/", app=mcp.streamable_http_app()),
+]
+
+app = Starlette(routes=routes)
+
 if __name__ == "__main__":
     import os
     import uvicorn
     port = int(os.environ.get("PORT", 8080))
-    app = mcp.streamable_http_app()
     uvicorn.run(app, host="0.0.0.0", port=port, proxy_headers=True, forwarded_allow_ips="*")
