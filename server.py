@@ -46,12 +46,28 @@ def _extract_jsonld_from_html(html: str) -> dict | None:
             if isinstance(data, dict) and (
                 data.get("@type") == "DiscloseSignals"
                 or "signals" in data
+                or "attributes" in data
                 or "merchant_domain" in data
             ):
                 return data
         except Exception:
             continue
     return None
+
+
+def _get_signals(data: dict) -> dict:
+    """
+    Normalize v0.1 (signals key, bare names) and v0.2 (attributes key,
+    disclose: prefix) into a plain dict keyed by bare signal name.
+    """
+    # v0.2 schema
+    if "attributes" in data:
+        return {
+            k.removeprefix("disclose:"): v
+            for k, v in data["attributes"].items()
+        }
+    # v0.1 schema
+    return data.get("signals", {})
 
 
 def _get_attestation_label(signal: dict) -> str:
@@ -73,7 +89,7 @@ def _get_attestation_label(signal: dict) -> str:
 
 
 def _annotate_signals(data: dict) -> dict:
-    signals = data.get("signals", {})
+    signals = _get_signals(data)
     if not signals:
         return data
 
@@ -96,6 +112,8 @@ def _annotate_signals(data: dict) -> dict:
         sig.setdefault("computed_by", None)
         sig.setdefault("attestation", None)
 
+    # Write normalized signals back under a consistent key
+    data["signals"] = signals
     return data
 
 
@@ -219,7 +237,7 @@ async def check_signal_coverage(domain: str) -> str:
             ]
         }, indent=2)
 
-    signals = data.get("signals", {})
+    signals = _get_signals(data)
 
     present = []
     present_with_null_value = []
@@ -245,8 +263,8 @@ async def check_signal_coverage(domain: str) -> str:
 
     report = {
         "domain": domain,
-        "schema_version": data.get("schema_version"),
-        "generated_at": data.get("generated_at"),
+        "schema_version": data.get("disclose_version") or data.get("schema_version"),
+        "generated_at": data.get("issued_at") or data.get("generated_at"),
         "v1_signal_coverage": {
             "total_v1_signals": len(V1_SIGNALS),
             "present": len(present),
@@ -292,10 +310,6 @@ async def register(request: Request):
     }, status_code=201)
 
 
-async def mcp_head(request: Request):
-    return JSONResponse({}, status_code=200)
-
-
 mcp_app = mcp.streamable_http_app()
 
 
@@ -310,7 +324,6 @@ routes = [
     Route("/.well-known/oauth-protected-resource/mcp", oauth_protected_resource_mcp),
     Route("/.well-known/oauth-authorization-server", oauth_authorization_server),
     Route("/register", register, methods=["POST"]),
-    Route("/mcp", mcp_head, methods=["HEAD"]),
     Mount("/mcp", app=mcp_app),
 ]
 
