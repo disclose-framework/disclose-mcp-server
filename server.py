@@ -123,9 +123,10 @@ async def get_merchant_disclosure(domain: str) -> str:
     Retrieve a merchant's Disclose Framework disclosure file.
 
     Checks three discovery paths in order:
-      1. /.well-known/disclose.json
-      2. /disclose.json
-      3. JSON-LD embedded in the page <head>
+      1. /.well-known/disclose
+      2. /.well-known/disclose.json
+      3. /disclose.json
+      4. JSON-LD embedded in the page <head>
 
     Args:
         domain: The merchant domain to check (e.g. 'example.com'
@@ -139,7 +140,7 @@ async def get_merchant_disclosure(domain: str) -> str:
 
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
 
-        for path in ["/.well-known/disclose.json", "/disclose.json"]:
+        for path in ["/.well-known/disclose", "/.well-known/disclose.json", "/disclose.json"]:
             url = f"{base}{path}"
             try:
                 response = await client.get(url)
@@ -170,7 +171,8 @@ async def get_merchant_disclosure(domain: str) -> str:
 
         return (
             f"No Disclose Framework disclosure found for {domain}. "
-            f"Checked: {base}/.well-known/disclose.json, "
+            f"Checked: {base}/.well-known/disclose, "
+            f"{base}/.well-known/disclose.json, "
             f"{base}/disclose.json, and JSON-LD in page <head>."
         )
 
@@ -199,7 +201,7 @@ async def check_signal_coverage(domain: str) -> str:
 
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
 
-        for path in ["/.well-known/disclose.json", "/disclose.json"]:
+        for path in ["/.well-known/disclose", "/.well-known/disclose.json", "/disclose.json"]:
             url = f"{base}{path}"
             try:
                 response = await client.get(url)
@@ -231,6 +233,7 @@ async def check_signal_coverage(domain: str) -> str:
             "domain": domain,
             "error": "No disclosure file found.",
             "checked_paths": [
+                f"{base}/.well-known/disclose",
                 f"{base}/.well-known/disclose.json",
                 f"{base}/disclose.json",
                 f"{base} (JSON-LD in <head>)",
