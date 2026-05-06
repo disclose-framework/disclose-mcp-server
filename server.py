@@ -11,6 +11,7 @@ from starlette.routing import Route, Mount
 
 mcp = FastMCP(
     "Disclose",
+    icon="https://discloseframework.dev/disclose_protocol_logo.jpg",
     stateless_http=True,
     transport_security=TransportSecuritySettings(
         enable_dns_rebinding_protection=False,
