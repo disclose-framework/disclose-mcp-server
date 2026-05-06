@@ -10,7 +10,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route, Mount
 
 mcp = FastMCP(
-    "Disclose Framework",
+    "Disclose",
     stateless_http=True,
     transport_security=TransportSecuritySettings(
         enable_dns_rebinding_protection=False,
