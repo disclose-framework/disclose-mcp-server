@@ -9,6 +9,7 @@ mcp = FastMCP(
     "Disclose",
     stateless_http=True,
     json_response=True,
+    host="mcp.discloseframework.dev",
 )
 
 V1_SIGNALS = [
