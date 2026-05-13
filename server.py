@@ -7,7 +7,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import Response, JSONResponse
 from starlette.routing import Route, Mount
 
 
@@ -245,6 +245,28 @@ async def handle_mcp_get(request: Request):
     return Response(status_code=405)
 
 
+async def oauth_protected_resource(request: Request):
+    return JSONResponse({
+        "resource": "https://mcp.discloseframework.dev",
+        "authorization_servers": []
+    })
+
+
+async def oauth_authorization_server(request: Request):
+    return JSONResponse({
+        "issuer": "https://mcp.discloseframework.dev",
+        "token_endpoint": "https://mcp.discloseframework.dev/token",
+        "response_types_supported": ["token"]
+    })
+
+
+async def register(request: Request):
+    return JSONResponse({
+        "client_id": "public",
+        "client_secret": None
+    }, status_code=201)
+
+
 mcp_app = mcp.streamable_http_app()
 
 
@@ -256,6 +278,10 @@ async def lifespan(app):
 
 routes = [
     Route("/mcp", handle_mcp_get, methods=["GET"]),
+    Route("/.well-known/oauth-protected-resource", oauth_protected_resource),
+    Route("/.well-known/oauth-protected-resource/mcp", oauth_protected_resource),
+    Route("/.well-known/oauth-authorization-server", oauth_authorization_server),
+    Route("/register", register, methods=["POST"]),
     Mount("/", app=mcp_app),
 ]
 
