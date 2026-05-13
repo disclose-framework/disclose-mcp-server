@@ -2,8 +2,14 @@ import httpx
 import json
 import re
 import os
+from contextlib import asynccontextmanager
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import Response
+from starlette.routing import Route, Mount
+
 
 mcp = FastMCP(
     "Disclose",
@@ -235,7 +241,25 @@ async def check_signal_coverage(domain: str) -> str:
     return json.dumps(report, indent=2)
 
 
-app = mcp.streamable_http_app()
+async def handle_mcp_get(request: Request):
+    return Response(status_code=405)
+
+
+mcp_app = mcp.streamable_http_app()
+
+
+@asynccontextmanager
+async def lifespan(app):
+    async with mcp_app.router.lifespan_context(app):
+        yield
+
+
+routes = [
+    Route("/mcp", handle_mcp_get, methods=["GET"]),
+    Mount("/", app=mcp_app),
+]
+
+app = Starlette(routes=routes, lifespan=lifespan)
 
 if __name__ == "__main__":
     import uvicorn
