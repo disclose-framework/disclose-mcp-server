@@ -3,7 +3,6 @@ import json
 import re
 from contextlib import asynccontextmanager
 from mcp.server.fastmcp import FastMCP
-from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -13,9 +12,6 @@ mcp = FastMCP(
     "Disclose",
     icons=["https://discloseframework.dev/disclose_protocol_logo.jpg"],
     stateless_http=True,
-    transport_security=TransportSecuritySettings(
-        enable_dns_rebinding_protection=False,
-    )
 )
 
 V1_SIGNALS = [
@@ -57,17 +53,11 @@ def _extract_jsonld_from_html(html: str) -> dict | None:
 
 
 def _get_signals(data: dict) -> dict:
-    """
-    Normalize v0.1 (signals key, bare names) and v0.2 (attributes key,
-    disclose: prefix) into a plain dict keyed by bare signal name.
-    """
-    # v0.2 schema
     if "attributes" in data:
         return {
             k.removeprefix("disclose:"): v
             for k, v in data["attributes"].items()
         }
-    # v0.1 schema
     return data.get("signals", {})
 
 
@@ -113,7 +103,6 @@ def _annotate_signals(data: dict) -> dict:
         sig.setdefault("computed_by", None)
         sig.setdefault("attestation", None)
 
-    # Write normalized signals back under a consistent key
     data["signals"] = signals
     return data
 
