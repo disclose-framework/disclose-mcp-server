@@ -2,7 +2,31 @@ import httpx
 import json
 import re
 import os
+from contextlib import asynccontextmanager
 from mcp.server.fastmcp import FastMCP
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.routing import Route, Mount
+from starlette.middleware.base import BaseHTTPMiddleware
+
+
+class FixAcceptHeaderMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        accept = request.headers.get("accept", "")
+        if "text/event-stream" in accept and "application/json" not in accept:
+            headers = dict(request.headers)
+            headers["accept"] = "application/json, text/event-stream"
+            request._headers = request.headers.__class__(
+                scope=request.scope,
+                receive=request._receive,
+            )
+            request.scope["headers"] = [
+                (k.encode(), v.encode()) if k != "accept" else (b"accept", b"application/json, text/event-stream")
+                for k, v in request.headers.items()
+            ]
+        return await call_next(request)
+
 
 mcp = FastMCP(
     "Disclose",
@@ -156,8 +180,7 @@ async def check_signal_coverage(domain: str) -> str:
     Check which V1 signals a merchant has published in their disclosure file.
 
     Args:
-        domain: The merchant domain to check (e.g. 'example.com'
-                or 'https://example.com')
+        domain: The merchant domain to check
 
     Returns:
         A structured coverage report as JSON.
@@ -231,8 +254,23 @@ async def check_signal_coverage(domain: str) -> str:
     return json.dumps(report, indent=2)
 
 
+mcp_app = mcp.streamable_http_app()
+
+
+@asynccontextmanager
+async def lifespan(app):
+    async with mcp_app.router.lifespan_context(app):
+        yield
+
+
+routes = [
+    Mount("/", app=mcp_app),
+]
+
+app = Starlette(routes=routes, lifespan=lifespan)
+app.add_middleware(FixAcceptHeaderMiddleware)
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8080))
-    app = mcp.streamable_http_app(json_response=True)
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=port, proxy_headers=True, forwarded_allow_ips="*")
