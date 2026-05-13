@@ -2,27 +2,13 @@ import httpx
 import json
 import re
 import os
-from contextlib import asynccontextmanager
 from mcp.server.fastmcp import FastMCP
-from starlette.applications import Starlette
-from starlette.routing import Mount
-from starlette.middleware.base import BaseHTTPMiddleware
-
-
-class FixAcceptHeaderMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        accept = request.headers.get("accept", "")
-        if "text/event-stream" in accept and "application/json" not in accept:
-            request.scope["headers"] = [
-                (b"accept", b"application/json, text/event-stream") if k == b"accept" else (k, v)
-                for k, v in request.scope["headers"]
-            ]
-        return await call_next(request)
 
 
 mcp = FastMCP(
     "Disclose",
     stateless_http=True,
+    json_response=True,
 )
 
 V1_SIGNALS = [
@@ -246,23 +232,28 @@ async def check_signal_coverage(domain: str) -> str:
     return json.dumps(report, indent=2)
 
 
-mcp_app = mcp.streamable_http_app()
+class AcceptFixMiddleware:
+    """Raw ASGI middleware that runs before any framework layer."""
+    def __init__(self, app):
+        self.app = app
 
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            headers = list(scope.get("headers", []))
+            new_headers = []
+            for k, v in headers:
+                if k.lower() == b"accept":
+                    accept = v.decode("latin-1")
+                    if "text/event-stream" in accept and "application/json" not in accept:
+                        v = b"application/json, text/event-stream"
+                new_headers.append((k, v))
+            scope["headers"] = new_headers
+        await self.app(scope, receive, send)
 
-@asynccontextmanager
-async def lifespan(app):
-    async with mcp_app.router.lifespan_context(app):
-        yield
-
-
-routes = [
-    Mount("/", app=mcp_app),
-]
-
-app = Starlette(routes=routes, lifespan=lifespan)
-app.add_middleware(FixAcceptHeaderMiddleware)
 
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8080))
+    inner_app = mcp.streamable_http_app()
+    app = AcceptFixMiddleware(inner_app)
     uvicorn.run(app, host="0.0.0.0", port=port, proxy_headers=True, forwarded_allow_ips="*")
