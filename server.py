@@ -10,20 +10,26 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route, Mount
 from starlette.middleware.base import BaseHTTPMiddleware
 
+# Patch the SDK's strict Accept header validation
+import mcp.server.streamable_http as _sh
+_original_validate = _sh.StreamableHTTPServerTransport._validate_accept_header
+
+async def _patched_validate(self, request):
+    accept = request.headers.get("accept", "")
+    if "text/event-stream" in accept or "application/json" in accept or "*/*" in accept:
+        return None
+    return await _original_validate(self, request)
+
+_sh.StreamableHTTPServerTransport._validate_accept_header = _patched_validate
+
 
 class FixAcceptHeaderMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         accept = request.headers.get("accept", "")
         if "text/event-stream" in accept and "application/json" not in accept:
-            headers = dict(request.headers)
-            headers["accept"] = "application/json, text/event-stream"
-            request._headers = request.headers.__class__(
-                scope=request.scope,
-                receive=request._receive,
-            )
             request.scope["headers"] = [
-                (k.encode(), v.encode()) if k != "accept" else (b"accept", b"application/json, text/event-stream")
-                for k, v in request.headers.items()
+                (b"accept", b"application/json, text/event-stream") if k == b"accept" else (k, v)
+                for k, v in request.scope["headers"]
             ]
         return await call_next(request)
 
