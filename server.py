@@ -4,12 +4,10 @@ import re
 import os
 from mcp.server.fastmcp import FastMCP
 
-
 mcp = FastMCP(
     "Disclose",
     stateless_http=True,
     json_response=True,
-    host="mcp.discloseframework.dev",
 )
 
 V1_SIGNALS = [
@@ -233,28 +231,9 @@ async def check_signal_coverage(domain: str) -> str:
     return json.dumps(report, indent=2)
 
 
-class AcceptFixMiddleware:
-    """Raw ASGI middleware that runs before any framework layer."""
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] == "http":
-            headers = list(scope.get("headers", []))
-            new_headers = []
-            for k, v in headers:
-                if k.lower() == b"accept":
-                    accept = v.decode("latin-1")
-                    if "text/event-stream" in accept and "application/json" not in accept:
-                        v = b"application/json, text/event-stream"
-                new_headers.append((k, v))
-            scope["headers"] = new_headers
-        await self.app(scope, receive, send)
-
+app = mcp.streamable_http_app()
 
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8080))
-    inner_app = mcp.streamable_http_app()
-    app = AcceptFixMiddleware(inner_app)
     uvicorn.run(app, host="0.0.0.0", port=port, proxy_headers=True, forwarded_allow_ips="*")
