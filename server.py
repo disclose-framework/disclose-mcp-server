@@ -3,11 +3,15 @@ import json
 import re
 import os
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 mcp = FastMCP(
     "Disclose",
     stateless_http=True,
     json_response=True,
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=False,
+    ),
 )
 
 V1_SIGNALS = [
