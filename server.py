@@ -5,22 +5,8 @@ import os
 from contextlib import asynccontextmanager
 from mcp.server.fastmcp import FastMCP
 from starlette.applications import Starlette
-from starlette.requests import Request
-from starlette.responses import JSONResponse
-from starlette.routing import Route, Mount
+from starlette.routing import Mount
 from starlette.middleware.base import BaseHTTPMiddleware
-
-# Patch the SDK's strict Accept header validation
-import mcp.server.streamable_http as _sh
-_original_validate = _sh.StreamableHTTPServerTransport._validate_accept_header
-
-async def _patched_validate(self, request):
-    accept = request.headers.get("accept", "")
-    if "text/event-stream" in accept or "application/json" in accept or "*/*" in accept:
-        return None
-    return await _original_validate(self, request)
-
-_sh.StreamableHTTPServerTransport._validate_accept_header = _patched_validate
 
 
 class FixAcceptHeaderMiddleware(BaseHTTPMiddleware):
