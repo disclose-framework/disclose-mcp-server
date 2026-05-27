@@ -288,6 +288,7 @@ routes = [
     Route("/.well-known/oauth-protected-resource/mcp", oauth_protected_resource),
     Route("/.well-known/oauth-authorization-server", oauth_authorization_server),
     Route("/register", register, methods=["POST"]),
+    Route("/", lambda request: Response(status_code=200), methods=["GET", "HEAD"]),
     Mount("/", app=mcp_app),
 ]
 
