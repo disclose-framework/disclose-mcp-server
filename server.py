@@ -272,6 +272,12 @@ mcp_app = mcp.streamable_http_app()
 
 @asynccontextmanager
 async def lifespan(app):
+    # Wake function-bun on startup to prevent cold-start timeouts
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            await client.get("https://function-bun-production-7a45.up.railway.app/")
+        except Exception:
+            pass
     async with mcp_app.router.lifespan_context(app):
         yield
 
