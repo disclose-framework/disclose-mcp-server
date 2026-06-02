@@ -1,6 +1,6 @@
 # Disclose MCP Server
 
-An MCP server for querying merchant disclosure signals published via the [Disclose Framework](https://discloseframework.dev).
+An MCP server for querying merchant disclosure signals published via [Disclose](https://discloseprotocol.dev).
 
 ## What it does
 
