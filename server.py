@@ -109,7 +109,7 @@ def _annotate_signals(data: dict) -> dict:
 @mcp.tool()
 async def get_merchant_disclosure(domain: str) -> str:
     """
-    Retrieve a merchant's Disclose Framework disclosure file.
+    Retrieve a merchant's Disclose file.
 
     Checks three discovery paths in order:
       1. /.well-known/disclose
@@ -154,7 +154,7 @@ async def get_merchant_disclosure(domain: str) -> str:
         except httpx.RequestError:
             pass
         return (
-            f"No Disclose Framework disclosure found for {domain}. "
+            f"No Disclose data found for {domain}. "
             f"Checked: {base}/.well-known/disclose, "
             f"{base}/.well-known/disclose.json, "
             f"{base}/disclose.json, and JSON-LD in page <head>."
@@ -247,15 +247,15 @@ async def handle_mcp_get(request: Request):
 
 async def oauth_protected_resource(request: Request):
     return JSONResponse({
-        "resource": "https://mcp.discloseframework.dev",
+        "resource": "https://mcp.discloseprotocol.dev",
         "authorization_servers": []
     })
 
 
 async def oauth_authorization_server(request: Request):
     return JSONResponse({
-        "issuer": "https://mcp.discloseframework.dev",
-        "token_endpoint": "https://mcp.discloseframework.dev/token",
+        "issuer": "https://mcp.discloseprotocol.dev",
+        "token_endpoint": "https://mcp.discloseprotocol.dev/token",
         "response_types_supported": ["token"]
     })
 
